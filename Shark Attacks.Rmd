@@ -1,0 +1,227 @@
+---
+title: "Shark Attacks"
+author: "GS"
+date: "9/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, comment = "", fig.align='center')
+```
+```{r, packages}
+library(ggpubr)
+library(ggcorrplot)
+library(GGally)
+library(mice)
+library(ggsci)
+library(lubridate)
+library(tidymodels)
+library(tidyverse)
+
+tidymodels_prefer()
+
+theme_set(theme_bw())
+```
+
+```{r, dataset}
+
+shark <- read_csv("attacks.csv")
+glimpse(shark)
+
+shark <- shark %>% 
+  select(-c(Name, `Investigator or Source`, pdf, `href formula`, href, `Case Number_1`, `Case Number_2`, X23, X24, `original order`)) %>% 
+  rename(Fatal = `Fatal (Y/N)`) %>% 
+  rename(Case = `Case Number`) %>% 
+  mutate(Age = as.numeric(Age)) %>% 
+  dplyr::filter(Year >= 1900)
+
+  
+shark %>% 
+  group_by(Country) %>% 
+  count() %>% 
+  arrange(desc(n)) 
+
+```
+
+```{r, sex}
+# Cleaning strange values in Sex variable
+
+shark %>% 
+  group_by(Sex) %>% 
+  count() %>% 
+  arrange(desc(n)) 
+
+shark <- shark %>%
+  mutate(Sex = ifelse(Sex == "lli", NA, Sex),
+         Sex = ifelse(Sex == ".", NA, Sex),
+         Sex = ifelse(Sex == "N", "M", Sex)
+         )
+
+shark %>% 
+  group_by(Type) %>% 
+  count() %>% 
+  arrange(desc(n))
+```
+
+```{r, type}
+# Cleaning strange values in Type variable
+
+shark <- shark %>% 
+  mutate(Type = ifelse(Type == "Boat", "Boating", Type),
+         Type = ifelse(Type == "Boatomg", "Boating", Type),
+         Type = ifelse(Type == "Questionable", NA, Type)
+         )
+```
+
+```{r, age}
+# Variable Age
+summary(shark$Age)
+
+ggplot(shark, aes(Age)) + 
+  geom_histogram(fill = "#6193ef", color = "#0e4fc8")
+
+ggplot(shark, aes(Age, color = Sex)) + 
+  geom_density() + 
+  labs(title = "Similar distribucion de los ataques por edad y sexo",
+       y = "",
+       x = "Edad",
+       color = "Sexo") +
+  theme(legend.position = c(.9, .8)) 
+  
+
+ggplot(shark, aes(Age, Sex, color = Sex)) + 
+  geom_boxplot(notch = T) + 
+  geom_jitter(alpha = .07) + 
+  stat_summary(fun.y="mean") +
+  coord_flip() + 
+  theme(legend.position = "none") +
+  labs(title = "Similar distribucion de los ataques por edad y sexo",
+       y = "",
+       x = "Edad",
+       color = "Sexo")
+```
+```{r, fatal}
+# Cleaning strange values in Fatal variable
+
+shark %>% 
+  group_by(Fatal) %>% 
+  count() %>% 
+  arrange(desc(n))
+
+shark <- shark %>% 
+  mutate(Fatal = ifelse(Fatal == "UNKNOWN", NA, Fatal),
+         Fatal = ifelse(Fatal == "2017", NA, Fatal),
+         Fatal = ifelse(Fatal == "M", NA, Fatal),
+         Fatal = ifelse(Fatal == "y", "Y", Fatal)
+         )
+```
+
+```{r, Year}
+shark %>% 
+  filter(Sex != "NA") %>% 
+  group_by(Year, Sex) %>% 
+  count() %>% 
+  ggplot(aes(y = n, x = Year, color = Sex)) + 
+  geom_line() + 
+   labs(title = "Mas varones que mujeres a lo largo de los años",
+       x = "Años",
+       y = "Cantidad", 
+       color = "Sexo") + 
+  theme(legend.position = c(0.08, 0.85)) + 
+  scale_colour_brewer(palette = "Set1", labels = c("Mujeres", "Varones")) 
+
+```
+
+```{r, USA by months}
+shark %>% 
+  mutate(Date = dmy(Date)) %>% 
+  filter(!is.na(Date) & !is.na(Sex)) %>% 
+  filter(Country == "USA") %>% 
+  group_by(Date, Sex) %>% 
+  count() %>% 
+  ggplot(aes(x = month(Date), y = n, fill = Sex)) + 
+  geom_bar(stat="identity") + 
+  labs(title = "Ataques de tiburon en USA",
+       subtitle = "Historico por mes (promedio)",
+       x = "Mes",
+       y = "Cantidad",
+       fill = "Sexo") + 
+  scale_fill_brewer(palette = "Set1") + 
+  scale_x_continuous(breaks = 1:12, labels = c("Ene", "Feb", "Mar", "Abr", "May", "Jun", 
+                                             "Jul", "Ago", "Sep", "Oct", "Nov", "Dic")
+                   ) + 
+  theme(panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 90))
+
+```
+
+```{r, Australia by month}
+shark %>% 
+  mutate(Date = dmy(Date)) %>% 
+  filter(!is.na(Date) & !is.na(Sex)) %>% 
+  filter(Country == "AUSTRALIA") %>% 
+  group_by(Date, Sex) %>% 
+  count() %>% 
+  ggplot(aes(x = month(Date), y = n, fill = Sex)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = "Ataques de tiburon en Australia",
+       subtitle = "Historico por mes (promedio)",
+       caption = "En espejo a USA (meses de calidos)",
+       x = "Mes",
+       y = "Cantidad",
+       fill = "Sexo") + 
+  scale_fill_brewer(palette = "Set1") + 
+  scale_x_continuous(breaks = 1:12, labels = c("Ene", "Feb", "Mar", "Abr", "May", "Jun", 
+                                             "Jul", "Ago", "Sep", "Oct", "Nov", "Dic")
+                   ) + 
+  theme(panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+shark %>% 
+  filter(Country == "USA" | Country == "AUSTRALIA") %>% 
+  group_by(Country) %>% 
+  count() %>% 
+  ggplot(aes(x = Country, y = n)) + 
+  geom_col(fill = "midnightblue") + 
+  geom_text(aes(label= n), vjust= -1) +
+  labs(title = "Comparacion entre USA y Australia",
+       subtitle = "Promedio historico",
+       x = "",
+       y = "Promedio") +
+  ylim(0, 2500)
+
+```
+```{r}
+shark %>% 
+  mutate(Date = dmy(Date)) %>% 
+  filter(!is.na(Date) & !is.na(Sex)) %>% 
+  filter(Country == "AUSTRALIA" | Country == "USA") %>% 
+  group_by(Date, Country, Sex) %>% 
+  count() %>% 
+  ggplot(aes(x = month(Date), y = n, fill = Sex)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Country) +
+  labs(title = "Comparacion ataques de tiburon en Australia y USA",
+       subtitle = "Historico por mes (promedio)",
+       caption = "En espejo por meses de calidos",
+       x = "Mes",
+       y = "Cantidad",
+       fill = "Sexo") + 
+  scale_fill_brewer(palette = "Set1") + 
+  scale_x_continuous(breaks = 1:12, labels = c("Ene", "Feb", "Mar", "Abr", "May", "Jun", 
+                                             "Jul", "Ago", "Sep", "Oct", "Nov", "Dic")
+                   ) + 
+  theme(panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+
+
+
+
+
